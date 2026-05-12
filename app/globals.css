@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: #0a0a0a;
+  color: #e5e5e5;
+  font-feature-settings: "ss01", "cv11";
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+}
+
+input, textarea, button {
+  font-family: inherit;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 rounded-md border border-border bg-panel hover:border-muted transition text-sm;
+}
+
+.btn-primary {
+  @apply bg-accent text-black border-accent hover:bg-accent/90;
+}
+
+.input {
+  @apply w-full bg-panel border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-muted;
+}
+
+.label {
+  @apply block text-xs uppercase tracking-wider text-muted mb-1.5;
+}
