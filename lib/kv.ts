@@ -26,6 +26,7 @@ export type View = {
   ua?: string;
   country?: string;
   city?: string;
+  sections?: Record<string, number>;
 };
 
 const DOC = (id: string) => `doc:${id}`;
@@ -88,6 +89,11 @@ export async function updateView(sessionId: string, patch: Partial<View>) {
   if (!existing) return;
   const merged: View = { ...existing, ...patch };
   await redis.set(VIEW(sessionId), merged);
+}
+
+export async function getView(sessionId: string): Promise<View | null> {
+  const v = await redis.get<View>(VIEW(sessionId));
+  return v ?? null;
 }
 
 export async function getViews(docId: string): Promise<View[]> {

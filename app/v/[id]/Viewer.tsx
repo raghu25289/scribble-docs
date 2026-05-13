@@ -30,6 +30,51 @@ const TRACK_SCRIPT = `
   });
   // initial
   tick('heartbeat');
+
+  // Section dwell tracking
+  function sectionId(el){
+    var ds = el.getAttribute('data-section');
+    if (ds) return ds;
+    if (el.id) return el.id;
+    var t = (el.textContent || '').trim().replace(/\\s+/g, ' ');
+    return t.slice(0, 60);
+  }
+  function flush(el){
+    var enter = el.__dsEnter;
+    if (!enter) return;
+    var dwell = Date.now() - enter;
+    el.__dsEnter = 0;
+    if (dwell < 500) return;
+    var id = sectionId(el);
+    if (!id) return;
+    parent.postMessage({ __ds: true, action: 'section', id: id, dwell: dwell }, '*');
+  }
+  function initSections(){
+    var els = document.querySelectorAll('section[data-section], section[id], [data-section], h2[id]');
+    if (!els.length || typeof IntersectionObserver === 'undefined') return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        var el = e.target;
+        if (e.isIntersecting) {
+          if (!el.__dsEnter) el.__dsEnter = Date.now();
+        } else {
+          flush(el);
+        }
+      });
+    }, { threshold: 0.5 });
+    els.forEach(function(el){ io.observe(el); });
+    window.addEventListener('beforeunload', function(){
+      els.forEach(function(el){ flush(el); });
+    });
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'hidden') els.forEach(function(el){ flush(el); });
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSections);
+  } else {
+    initSections();
+  }
 })();
 </script>
 `;
@@ -80,7 +125,23 @@ export default function Viewer({
 
     function onMessage(e: MessageEvent) {
       if (!e.data || !e.data.__ds) return;
-      const { action, maxScroll, duration } = e.data;
+      const { action } = e.data;
+      if (action === 'section') {
+        const { id, dwell } = e.data;
+        const payload = JSON.stringify({ action, sessionId, docId, id, dwell });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true,
+          }).catch(() => {});
+        }
+        return;
+      }
+      const { maxScroll, duration } = e.data;
       lastSentRef.current = { maxScroll, duration };
       const payload = JSON.stringify({ action, sessionId, docId, email, name, maxScroll, duration });
       // Use sendBeacon when available for reliability on unload

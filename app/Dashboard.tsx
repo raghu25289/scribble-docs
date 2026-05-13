@@ -24,6 +24,7 @@ type View = {
   duration: number;
   country?: string;
   city?: string;
+  sections?: Record<string, number>;
 };
 
 function fmt(ts?: number) {
@@ -352,26 +353,46 @@ function AnalyticsDrawer({
             <p className="text-sm text-muted">No views yet.</p>
           ) : (
             <div className="space-y-2">
-              {sorted.map((v) => (
-                <div key={v.sessionId} className="border border-border rounded p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="font-medium text-sm">
-                      {v.email || <span className="text-muted">Anonymous</span>}
-                      {v.name && <span className="text-muted ml-2">({v.name})</span>}
+              {sorted.map((v) => {
+                const sectionEntries = v.sections
+                  ? Object.entries(v.sections).sort((a, b) => b[1] - a[1])
+                  : [];
+                return (
+                  <div key={v.sessionId} className="border border-border rounded p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="font-medium text-sm">
+                        {v.email || <span className="text-muted">Anonymous</span>}
+                        {v.name && <span className="text-muted ml-2">({v.name})</span>}
+                      </div>
+                      <div className="text-xs text-muted">{fmt(v.openedAt)}</div>
                     </div>
-                    <div className="text-xs text-muted">{fmt(v.openedAt)}</div>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted">
-                    <span>⏱ {fmtDuration(v.duration)}</span>
-                    <span>↕ {Math.round(v.maxScroll)}% scroll</span>
-                    {(v.city || v.country) && (
-                      <span>
-                        📍 {[v.city, v.country].filter(Boolean).join(', ')}
-                      </span>
+                    <div className="flex items-center gap-4 text-xs text-muted">
+                      <span>⏱ {fmtDuration(v.duration)}</span>
+                      <span>↕ {Math.round(v.maxScroll)}% scroll</span>
+                      {(v.city || v.country) && (
+                        <span>
+                          📍 {[v.city, v.country].filter(Boolean).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                    {sectionEntries.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <div className="text-[10px] uppercase tracking-wider text-muted mb-2">
+                          Sections viewed
+                        </div>
+                        <div className="space-y-1">
+                          {sectionEntries.map(([id, ms]) => (
+                            <div key={id} className="flex items-center justify-between text-xs">
+                              <span className="truncate pr-3 text-white/80">{id}</span>
+                              <span className="text-muted shrink-0">{fmtDuration(ms / 1000)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

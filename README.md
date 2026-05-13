@@ -57,6 +57,21 @@ ADMIN_PASSWORD = <pick something strong>
 
 Hit deploy. First load goes to `/login`.
 
+## Notifications
+
+Get a Discord ping every time someone opens a doc.
+
+1. In Discord, open the target server: **Server Settings → Integrations → Webhooks → New Webhook**. Pick a channel, click **Copy Webhook URL**.
+2. Set it on Vercel:
+
+```bash
+vercel env add DISCORD_WEBHOOK_URL production
+# paste the webhook URL when prompted
+vercel --prod
+```
+
+When a viewer opens a doc, the API route fires a fire-and-forget POST to the webhook with the doc title, viewer email (or "Anonymous"), city/country, and doc ID. Failures are swallowed so tracking never breaks if Discord is down or the webhook is revoked.
+
 ## Run locally
 
 ```bash
