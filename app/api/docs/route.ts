@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     html: String(html),
     createdAt: Date.now(),
     gated: Boolean(gated),
+    version: 1,
   };
   await createDoc(doc);
   const { html: _h, ...meta } = doc;

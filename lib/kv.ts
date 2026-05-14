@@ -9,7 +9,8 @@ export type Doc = {
   html: string;
   createdAt: number;
   gated: boolean;
-  // requireEmail: boolean (alias of gated for clarity)
+  version: number;
+  updatedAt?: number;
 };
 
 export type View = {
@@ -27,6 +28,7 @@ export type View = {
   country?: string;
   city?: string;
   sections?: Record<string, number>;
+  docVersion?: number;
 };
 
 const DOC = (id: string) => `doc:${id}`;
@@ -43,6 +45,23 @@ export async function createDoc(doc: Doc) {
 export async function getDoc(id: string): Promise<Doc | null> {
   const d = await redis.get<Doc>(DOC(id));
   return d ?? null;
+}
+
+export async function updateDoc(id: string, patch: Partial<Doc>): Promise<Doc | null> {
+  const existing = await getDoc(id);
+  if (!existing) return null;
+  const currentVersion = existing.version ?? 1;
+  const htmlChanged = typeof patch.html === 'string' && patch.html !== existing.html;
+  const merged: Doc = {
+    ...existing,
+    ...patch,
+    id: existing.id,
+    createdAt: existing.createdAt,
+    version: htmlChanged ? currentVersion + 1 : currentVersion,
+    updatedAt: Date.now(),
+  };
+  await redis.set(DOC(id), merged);
+  return merged;
 }
 
 export async function deleteDoc(id: string) {

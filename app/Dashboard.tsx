@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 type DocRow = {
@@ -11,6 +11,8 @@ type DocRow = {
   gated: boolean;
   viewCount: number;
   lastViewedAt?: number;
+  version?: number;
+  updatedAt?: number;
 };
 
 type View = {
@@ -25,6 +27,7 @@ type View = {
   country?: string;
   city?: string;
   sections?: Record<string, number>;
+  docVersion?: number;
 };
 
 function fmt(ts?: number) {
@@ -43,8 +46,10 @@ export default function Dashboard({ initialDocs }: { initialDocs: DocRow[] }) {
   const router = useRouter();
   const [docs, setDocs] = useState(initialDocs);
   const [showUpload, setShowUpload] = useState(false);
+  const [updateFor, setUpdateFor] = useState<string | null>(null);
   const [openAnalyticsFor, setOpenAnalyticsFor] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<View[] | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -102,74 +107,115 @@ export default function Dashboard({ initialDocs }: { initialDocs: DocRow[] }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {docs.map((d) => (
-              <div
-                key={d.id}
-                className="border border-border rounded-lg p-4 hover:border-muted transition"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium truncate">{d.title}</h3>
-                      {d.gated && (
-                        <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/40 rounded px-1.5 py-0.5">
-                          Gated
+            {docs.map((d) => {
+              const version = d.version ?? 1;
+              const showUpdated = d.updatedAt && d.updatedAt !== d.createdAt;
+              return (
+                <div
+                  key={d.id}
+                  className="border border-border rounded-lg p-4 hover:border-muted transition"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-medium truncate">{d.title}</h3>
+                        {version > 1 && (
+                          <span className="text-[10px] uppercase tracking-wider text-muted border border-border rounded px-1.5 py-0.5">
+                            v{version}
+                          </span>
+                        )}
+                        {d.gated && (
+                          <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/40 rounded px-1.5 py-0.5">
+                            Gated
+                          </span>
+                        )}
+                      </div>
+                      {d.description && (
+                        <p className="text-sm text-muted truncate mb-2">{d.description}</p>
+                      )}
+                      <div className="flex items-center gap-4 text-xs text-muted">
+                        <span>Created {fmt(d.createdAt)}</span>
+                        {showUpdated && (
+                          <>
+                            <span>•</span>
+                            <span>Updated {fmt(d.updatedAt)}</span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>
+                          {d.viewCount} {d.viewCount === 1 ? 'view' : 'views'}
                         </span>
-                      )}
+                        {d.lastViewedAt && (
+                          <>
+                            <span>•</span>
+                            <span>Last viewed {fmt(d.lastViewedAt)}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <code className="text-xs bg-panel border border-border rounded px-2 py-1 text-muted">
+                          {baseUrl}/v/{d.id}
+                        </code>
+                      </div>
                     </div>
-                    {d.description && (
-                      <p className="text-sm text-muted truncate mb-2">{d.description}</p>
-                    )}
-                    <div className="flex items-center gap-4 text-xs text-muted">
-                      <span>Created {fmt(d.createdAt)}</span>
-                      <span>•</span>
-                      <span>
-                        {d.viewCount} {d.viewCount === 1 ? 'view' : 'views'}
-                      </span>
-                      {d.lastViewedAt && (
-                        <>
-                          <span>•</span>
-                          <span>Last viewed {fmt(d.lastViewedAt)}</span>
-                        </>
-                      )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button className="btn text-xs" onClick={() => copyLink(d.id)}>
+                        Copy link
+                      </button>
+                      <button className="btn text-xs" onClick={() => setUpdateFor(d.id)}>
+                        Update
+                      </button>
+                      <a className="btn text-xs" href={`/v/${d.id}`} target="_blank" rel="noreferrer">
+                        Preview
+                      </a>
+                      <button className="btn text-xs" onClick={() => openAnalytics(d.id)}>
+                        Analytics
+                      </button>
+                      <button
+                        className="btn text-xs text-red-400 border-red-900/50 hover:border-red-500"
+                        onClick={() => deleteDoc(d.id)}
+                      >
+                        Delete
+                      </button>
                     </div>
-                    <div className="mt-2">
-                      <code className="text-xs bg-panel border border-border rounded px-2 py-1 text-muted">
-                        {baseUrl}/v/{d.id}
-                      </code>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button className="btn text-xs" onClick={() => copyLink(d.id)}>
-                      Copy link
-                    </button>
-                    <a className="btn text-xs" href={`/v/${d.id}`} target="_blank" rel="noreferrer">
-                      Preview
-                    </a>
-                    <button className="btn text-xs" onClick={() => openAnalytics(d.id)}>
-                      Analytics
-                    </button>
-                    <button
-                      className="btn text-xs text-red-400 border-red-900/50 hover:border-red-500"
-                      onClick={() => deleteDoc(d.id)}
-                    >
-                      Delete
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
 
       {showUpload && (
         <UploadModal
+          mode="create"
           onClose={() => setShowUpload(false)}
-          onCreated={(doc) => {
+          onSaved={(doc) => {
             startTransition(() => {
               setDocs((d) => [{ ...doc, viewCount: 0 }, ...d]);
               setShowUpload(false);
+            });
+          }}
+        />
+      )}
+
+      {updateFor && (
+        <UploadModal
+          mode="update"
+          docId={updateFor}
+          onClose={() => setUpdateFor(null)}
+          onSaved={(doc) => {
+            startTransition(() => {
+              setDocs((d) =>
+                d.map((x) =>
+                  x.id === doc.id
+                    ? { ...x, ...doc, viewCount: x.viewCount, lastViewedAt: x.lastViewedAt }
+                    : x,
+                ),
+              );
+              setUpdateFor(null);
+              setToast(`Updated to v${doc.version ?? 1}`);
+              setTimeout(() => setToast(null), 2500);
             });
           }}
         />
@@ -183,23 +229,59 @@ export default function Dashboard({ initialDocs }: { initialDocs: DocRow[] }) {
           onClose={() => setOpenAnalyticsFor(null)}
         />
       )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-panel border border-accent/40 text-accent text-sm rounded-md px-4 py-2 shadow-lg z-50">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
 
 function UploadModal({
+  mode,
+  docId,
   onClose,
-  onCreated,
+  onSaved,
 }: {
+  mode: 'create' | 'update';
+  docId?: string;
   onClose: () => void;
-  onCreated: (doc: DocRow) => void;
+  onSaved: (doc: DocRow) => void;
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [html, setHtml] = useState('');
   const [gated, setGated] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(mode === 'update');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (mode !== 'update' || !docId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`/api/docs/${docId}`);
+      if (!res.ok) {
+        if (!cancelled) {
+          setError('Failed to load doc.');
+          setLoading(false);
+        }
+        return;
+      }
+      const doc = await res.json();
+      if (cancelled) return;
+      setTitle(doc.title ?? '');
+      setDescription(doc.description ?? '');
+      setHtml(doc.html ?? '');
+      setGated(Boolean(doc.gated));
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, docId]);
 
   async function onFile(file: File) {
     if (!file) return;
@@ -215,29 +297,39 @@ function UploadModal({
     }
     setSubmitting(true);
     setError('');
-    const res = await fetch('/api/docs', {
-      method: 'POST',
+    const url = mode === 'create' ? '/api/docs' : `/api/docs/${docId}`;
+    const method = mode === 'create' ? 'POST' : 'PATCH';
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description, html, gated }),
     });
     if (!res.ok) {
-      setError('Failed to create.');
+      setError(mode === 'create' ? 'Failed to create.' : 'Failed to update.');
       setSubmitting(false);
       return;
     }
     const doc = await res.json();
-    onCreated(doc);
+    onSaved(doc);
   }
+
+  const heading = mode === 'create' ? 'New doc' : 'Update doc';
+  const submitLabel = mode === 'create'
+    ? (submitting ? 'Creating…' : 'Create & get link')
+    : (submitting ? 'Updating…' : 'Save changes');
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="bg-panel border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-5 border-b border-border flex items-center justify-between">
-          <h2 className="font-medium">New doc</h2>
+          <h2 className="font-medium">{heading}</h2>
           <button className="text-muted text-sm hover:text-white" onClick={onClose}>
             ✕
           </button>
         </div>
+        {loading ? (
+          <div className="p-5 text-sm text-muted">Loading current doc…</div>
+        ) : (
         <div className="p-5 overflow-y-auto space-y-4">
           <div>
             <label className="label">Title</label>
@@ -292,12 +384,13 @@ function UploadModal({
           </label>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
+        )}
         <div className="p-5 border-t border-border flex justify-end gap-2">
           <button className="btn" onClick={onClose} disabled={submitting}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-            {submitting ? 'Creating…' : 'Create & get link'}
+          <button className="btn btn-primary" onClick={submit} disabled={submitting || loading}>
+            {submitLabel}
           </button>
         </div>
       </div>
@@ -364,7 +457,12 @@ function AnalyticsDrawer({
                         {v.email || <span className="text-muted">Anonymous</span>}
                         {v.name && <span className="text-muted ml-2">({v.name})</span>}
                       </div>
-                      <div className="text-xs text-muted">{fmt(v.openedAt)}</div>
+                      <div className="flex items-center gap-2 text-xs text-muted">
+                        <span className="border border-border rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
+                          v{v.docVersion ?? 1}
+                        </span>
+                        <span>{fmt(v.openedAt)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted">
                       <span>⏱ {fmtDuration(v.duration)}</span>

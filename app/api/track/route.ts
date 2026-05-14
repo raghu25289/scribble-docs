@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
       ua,
       country,
       city,
+      docVersion: doc.version ?? 1,
     });
     notifyDiscord({ doc: { id: docId, title: doc.title }, email, city, country });
   } else if (action === 'heartbeat') {
