@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { getDoc } from '@/lib/kv';
 import Gate from './Gate';
 import Viewer from './Viewer';
+import PdfViewer from './PdfViewer';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,5 +43,18 @@ export default async function ViewPage({ params }: { params: Promise<{ id: strin
     return <Gate docId={id} title={doc.title} description={doc.description} />;
   }
 
-  return <Viewer docId={id} html={doc.html} email={email} name={name} title={doc.title} />;
+  if (doc.kind === 'pdf') {
+    return (
+      <PdfViewer
+        docId={id}
+        pdfUrl={doc.pdfUrl ?? ''}
+        pdfPages={doc.pdfPages}
+        email={email}
+        name={name}
+        title={doc.title}
+      />
+    );
+  }
+
+  return <Viewer docId={id} html={doc.html ?? ''} email={email} name={name} title={doc.title} />;
 }

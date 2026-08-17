@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { recordOpen, updateView, getDoc, getView } from '@/lib/kv';
 
 const SECTION_DWELL_CAP_MS = 30 * 60 * 1000;
+const PAGE_DWELL_CAP_MS = 30 * 60 * 1000;
 
 function notifyDiscord(payload: {
-  doc: { id: string; title: string };
+  doc: { id: string; title: string; kind: 'html' | 'pdf' };
   email?: string;
   city?: string;
   country?: string;
 }) {
   const url = process.env.DISCORD_WEBHOOK_URL;
   if (!url) return;
+  const kindSuffix = payload.doc.kind === 'pdf' ? ' (PDF)' : ' (HTML)';
   const body = {
     embeds: [
       {
         title: 'New doc view',
-        description: `**${payload.doc.title}** was just opened`,
+        description: `**${payload.doc.title}${kindSuffix}** was just opened`,
         color: 12910336,
         fields: [
           { name: 'Viewer', value: payload.email || 'Anonymous', inline: true },
@@ -43,7 +45,7 @@ function notifyDiscord(payload: {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { action, sessionId, docId, email, name, maxScroll, duration, id, dwell } = body || {};
+  const { action, sessionId, docId, email, name, maxScroll, duration, id, dwell, pageNumber } = body || {};
 
   if (!sessionId || !docId) {
     return NextResponse.json({ error: 'missing fields' }, { status: 400 });
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
       city,
       docVersion: doc.version ?? 1,
     });
-    notifyDiscord({ doc: { id: docId, title: doc.title }, email, city, country });
+    notifyDiscord({ doc: { id: docId, title: doc.title, kind: doc.kind }, email, city, country });
   } else if (action === 'heartbeat') {
     await updateView(sessionId, {
       lastSeenAt: now,
@@ -105,6 +107,21 @@ export async function POST(req: NextRequest) {
         const sections = { ...(existing.sections || {}) };
         sections[id] = Math.min((sections[id] || 0) + addDwell, SECTION_DWELL_CAP_MS);
         await updateView(sessionId, { sections, lastSeenAt: now });
+      }
+    }
+  } else if (action === 'page') {
+    const pageNum = Number(pageNumber);
+    if (!Number.isFinite(pageNum) || pageNum < 1) {
+      return NextResponse.json({ error: 'missing page number' }, { status: 400 });
+    }
+    const addDwell = Math.min(Math.max(Number(dwell) || 0, 0), PAGE_DWELL_CAP_MS);
+    if (addDwell > 0) {
+      const existing = await getView(sessionId);
+      if (existing) {
+        const pagesViewed = { ...(existing.pagesViewed || {}) };
+        pagesViewed[pageNum] = Math.min((pagesViewed[pageNum] || 0) + addDwell, PAGE_DWELL_CAP_MS);
+        const maxPage = Math.max(existing.maxPage || 0, pageNum);
+        await updateView(sessionId, { pagesViewed, maxPage, lastSeenAt: now });
       }
     }
   }

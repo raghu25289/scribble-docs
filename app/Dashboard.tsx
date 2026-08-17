@@ -7,6 +7,8 @@ type DocRow = {
   id: string;
   title: string;
   description?: string;
+  kind?: 'html' | 'pdf';
+  pdfPages?: number;
   createdAt: number;
   gated: boolean;
   viewCount: number;
@@ -27,6 +29,8 @@ type View = {
   country?: string;
   city?: string;
   sections?: Record<string, number>;
+  pagesViewed?: Record<number, number>;
+  maxPage?: number;
   docVersion?: number;
 };
 
@@ -119,6 +123,9 @@ export default function Dashboard({ initialDocs }: { initialDocs: DocRow[] }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium truncate">{d.title}</h3>
+                        <span className="text-[10px] uppercase tracking-wider text-muted border border-border rounded px-1.5 py-0.5">
+                          {d.kind === 'pdf' ? 'PDF' : 'HTML'}
+                        </span>
                         {version > 1 && (
                           <span className="text-[10px] uppercase tracking-wider text-muted border border-border rounded px-1.5 py-0.5">
                             v{version}
@@ -250,9 +257,11 @@ function UploadModal({
   onClose: () => void;
   onSaved: (doc: DocRow) => void;
 }) {
+  const [kind, setKind] = useState<'html' | 'pdf'>('html');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [html, setHtml] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [gated, setGated] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(mode === 'update');
@@ -275,6 +284,7 @@ function UploadModal({
       setTitle(doc.title ?? '');
       setDescription(doc.description ?? '');
       setHtml(doc.html ?? '');
+      setKind(doc.kind === 'pdf' ? 'pdf' : 'html');
       setGated(Boolean(doc.gated));
       setLoading(false);
     })();
@@ -290,20 +300,39 @@ function UploadModal({
     if (!title) setTitle(file.name.replace(/\.html?$/i, ''));
   }
 
+  function onPdfFile(file: File) {
+    if (!file) return;
+    setPdfFile(file);
+    if (!title) setTitle(file.name.replace(/\.pdf$/i, ''));
+  }
+
   async function submit() {
-    if (!title.trim() || !html.trim()) {
-      setError('Title and HTML are required.');
+    if (!title.trim()) {
+      setError('Title is required.');
+      return;
+    }
+    if (kind === 'html' && !html.trim()) {
+      setError('HTML is required.');
+      return;
+    }
+    if (kind === 'pdf' && !pdfFile && mode === 'create') {
+      setError('A PDF file is required.');
       return;
     }
     setSubmitting(true);
     setError('');
     const url = mode === 'create' ? '/api/docs' : `/api/docs/${docId}`;
     const method = mode === 'create' ? 'POST' : 'PATCH';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, html, gated }),
-    });
+    const form = new FormData();
+    form.set('title', title);
+    form.set('description', description);
+    form.set('gated', String(gated));
+    if (kind === 'pdf') {
+      if (pdfFile) form.set('pdf', pdfFile);
+    } else {
+      form.set('html', html);
+    }
+    const res = await fetch(url, { method, body: form });
     if (!res.ok) {
       setError(mode === 'create' ? 'Failed to create.' : 'Failed to update.');
       setSubmitting(false);
@@ -331,6 +360,26 @@ function UploadModal({
           <div className="p-5 text-sm text-muted">Loading current doc…</div>
         ) : (
         <div className="p-5 overflow-y-auto space-y-4">
+          <div className="flex gap-1 border border-border rounded-md p-1 w-fit">
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-xs rounded transition ${
+                kind === 'html' ? 'bg-accent text-black' : 'text-muted hover:text-white'
+              }`}
+              onClick={() => setKind('html')}
+            >
+              HTML
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-xs rounded transition ${
+                kind === 'pdf' ? 'bg-accent text-black' : 'text-muted hover:text-white'
+              }`}
+              onClick={() => setKind('pdf')}
+            >
+              PDF
+            </button>
+          </div>
           <div>
             <label className="label">Title</label>
             <input
@@ -349,30 +398,52 @@ function UploadModal({
               placeholder="Sent to Aksh on May 12"
             />
           </div>
-          <div>
-            <label className="label">HTML</label>
-            <div className="flex items-center gap-2 mb-2">
-              <label className="btn text-xs cursor-pointer">
-                Upload .html file
+          {kind === 'html' ? (
+            <div>
+              <label className="label">HTML</label>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="btn text-xs cursor-pointer">
+                  Upload .html file
+                  <input
+                    type="file"
+                    accept=".html,text/html"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+                  />
+                </label>
+                <span className="text-xs text-muted">or paste below</span>
+              </div>
+              <textarea
+                className="input font-mono text-xs h-48"
+                value={html}
+                onChange={(e) => setHtml(e.target.value)}
+                placeholder="<!doctype html>..."
+              />
+              <p className="text-xs text-muted mt-1">
+                {html.length > 0 ? `${(html.length / 1024).toFixed(1)} KB` : 'Empty'}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="label">PDF</label>
+              <label className="btn text-xs cursor-pointer w-fit">
+                Choose .pdf file
                 <input
                   type="file"
-                  accept=".html,text/html"
+                  accept=".pdf,application/pdf"
                   className="hidden"
-                  onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+                  onChange={(e) => e.target.files?.[0] && onPdfFile(e.target.files[0])}
                 />
               </label>
-              <span className="text-xs text-muted">or paste below</span>
+              <p className="text-xs text-muted mt-2">
+                {pdfFile
+                  ? `${pdfFile.name} · ${(pdfFile.size / 1024 / 1024).toFixed(2)} MB`
+                  : mode === 'update'
+                    ? 'Leave empty to keep the current PDF.'
+                    : 'No file selected.'}
+              </p>
             </div>
-            <textarea
-              className="input font-mono text-xs h-48"
-              value={html}
-              onChange={(e) => setHtml(e.target.value)}
-              placeholder="<!doctype html>..."
-            />
-            <p className="text-xs text-muted mt-1">
-              {html.length > 0 ? `${(html.length / 1024).toFixed(1)} KB` : 'Empty'}
-            </p>
-          </div>
+          )}
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
@@ -409,11 +480,16 @@ function AnalyticsDrawer({
   views: View[] | null;
   onClose: () => void;
 }) {
+  const isPdf = doc?.kind === 'pdf';
   const sorted = views ? [...views].sort((a, b) => b.openedAt - a.openedAt) : null;
   const totalViews = sorted?.length ?? 0;
   const uniqueViewers = sorted ? new Set(sorted.map((v) => v.email || v.sessionId)).size : 0;
   const avgDuration = sorted && sorted.length > 0 ? sorted.reduce((a, v) => a + v.duration, 0) / sorted.length : 0;
   const avgScroll = sorted && sorted.length > 0 ? sorted.reduce((a, v) => a + v.maxScroll, 0) / sorted.length : 0;
+  const avgPagesViewed =
+    sorted && sorted.length > 0
+      ? sorted.reduce((a, v) => a + Object.keys(v.pagesViewed || {}).length, 0) / sorted.length
+      : 0;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-stretch justify-end z-50" onClick={onClose}>
@@ -435,7 +511,11 @@ function AnalyticsDrawer({
           <Stat label="Views" value={totalViews.toString()} />
           <Stat label="Unique" value={uniqueViewers.toString()} />
           <Stat label="Avg time" value={fmtDuration(avgDuration)} />
-          <Stat label="Avg scroll" value={`${Math.round(avgScroll)}%`} />
+          {isPdf ? (
+            <Stat label="Avg pages viewed" value={avgPagesViewed.toFixed(1)} />
+          ) : (
+            <Stat label="Avg scroll" value={`${Math.round(avgScroll)}%`} />
+          )}
         </div>
 
         <div className="p-5">
@@ -449,6 +529,13 @@ function AnalyticsDrawer({
               {sorted.map((v) => {
                 const sectionEntries = v.sections
                   ? Object.entries(v.sections).sort((a, b) => b[1] - a[1])
+                  : [];
+                const pageCount = doc?.pdfPages ?? (v.pagesViewed ? Math.max(...Object.keys(v.pagesViewed).map(Number), v.maxPage ?? 0) : 0);
+                const pageEntries = isPdf && pageCount > 0
+                  ? Array.from({ length: pageCount }, (_, i) => i + 1).map((pn) => ({
+                      page: pn,
+                      dwellMs: v.pagesViewed?.[pn] ?? 0,
+                    }))
                   : [];
                 return (
                   <div key={v.sessionId} className="border border-border rounded p-3">
@@ -466,14 +553,42 @@ function AnalyticsDrawer({
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted">
                       <span>⏱ {fmtDuration(v.duration)}</span>
-                      <span>↕ {Math.round(v.maxScroll)}% scroll</span>
+                      {isPdf ? (
+                        <span>
+                          📄 {Object.keys(v.pagesViewed || {}).length}/{pageCount || '?'} pages
+                        </span>
+                      ) : (
+                        <span>↕ {Math.round(v.maxScroll)}% scroll</span>
+                      )}
                       {(v.city || v.country) && (
                         <span>
                           📍 {[v.city, v.country].filter(Boolean).join(', ')}
                         </span>
                       )}
                     </div>
-                    {sectionEntries.length > 0 && (
+                    {isPdf && pageEntries.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <div className="text-[10px] uppercase tracking-wider text-muted mb-2">
+                          Pages viewed
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {pageEntries.map(({ page, dwellMs }) => {
+                            const opacity = Math.min(1, dwellMs / 60000);
+                            return (
+                              <div key={page} className="flex flex-col items-center gap-1">
+                                <div
+                                  className="w-5 h-5 rounded-sm border border-border"
+                                  style={{ backgroundColor: `rgba(196, 255, 0, ${opacity})` }}
+                                  title={`Page ${page}: ${fmtDuration(dwellMs / 1000)}`}
+                                />
+                                <span className="text-[9px] text-muted">{page}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {!isPdf && sectionEntries.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-border">
                         <div className="text-[10px] uppercase tracking-wider text-muted mb-2">
                           Sections viewed

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { getDoc } from '@/lib/kv';
 import { injectAll } from '@/lib/inject';
 
@@ -9,7 +10,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const doc = await getDoc(id);
   if (!doc) notFound();
 
-  const html = injectAll(doc.html);
+  if (doc.kind === 'pdf') {
+    if (!doc.pdfUrl) notFound();
+    return NextResponse.redirect(doc.pdfUrl, 302);
+  }
+
+  const html = injectAll(doc.html ?? '');
 
   return new Response(html, {
     headers: {
